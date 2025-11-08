@@ -51,10 +51,17 @@ func (n *Notifier) PublishDigest(ctx context.Context, digest string) error {
 	if err != nil {
 		return fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return fmt.Errorf("telegram error: %s, close body: %v", resp.Status, closeErr)
+		}
 		return fmt.Errorf("telegram error: %s", resp.Status)
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		return fmt.Errorf("close telegram response body: %w", err)
 	}
 
 	return nil

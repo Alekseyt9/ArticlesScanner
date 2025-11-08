@@ -2,19 +2,22 @@ package main
 
 import (
 	"context"
-	"log"
+	"os"
 
 	"ArticlesScanner/internal/app"
 	"ArticlesScanner/internal/config"
+	"ArticlesScanner/internal/logging"
 )
 
 func main() {
 	ctx := context.Background()
 	cfg := config.Load()
+	logger := logging.New(cfg.Logging.Level)
 
-	application := app.New(cfg)
+	application := app.New(cfg, logger)
 
 	if err := application.Run(ctx); err != nil {
-		log.Fatalf("application stopped: %v", err)
+		logger.Error("application stopped", "error", err)
+		os.Exit(1)
 	}
 }

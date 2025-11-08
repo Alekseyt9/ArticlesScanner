@@ -1,6 +1,6 @@
 ﻿# ArticlesScanner
 
-Scientific article parser built with Go 1.23.3 and clean architecture.
+Scientific article parser built with Go 1.25.4 and clean architecture.
 
 - Scheduler triggers the ingestion pipeline once per day.
 - Scanner strategies crawl configured sites (Arxiv implementation included) and return daily summaries.
@@ -18,7 +18,7 @@ internal/ports         # inbound/outbound interfaces
 internal/scanner       # strategy registry abstractions
 internal/usecase       # orchestration logic (pipeline, scheduler)
 internal/infrastructure# adapters (parser strategies, storage, ml, llm, scheduler, telegram)
-pkg/logger             # shared helpers
+internal/logging       # slog helper wiring
 configs/               # YAML configuration (real file gitignored, example tracked)
 scripts/               # run script templates for Linux/Windows
 ```
@@ -28,6 +28,7 @@ scripts/               # run script templates for Linux/Windows
 1. Copy `configs/config.example.yaml` to `configs/config.yaml` and adjust:
    - Add/rename sites, choose scanner name (`arxiv`) and list category URLs (each URL may point to a filtered Arxiv listing).
    - Provide ChatGPT endpoint/model/key plus optional system prompt.
+   - Pick `logging.level` (`debug`, `info`, `warn`, `error`) — default is verbose debug logging.
 2. Copy run script templates:
    - `cp scripts/run.example.sh scripts/run.sh` (Linux/macOS) or `copy scripts\run.example.cmd scripts\run.cmd` (Windows).
    - Edit the new files to export real secrets (DSN, API keys, config path). Actual files are ignored by Git.
@@ -37,6 +38,11 @@ Important env vars:
 
 - `ARTICLE_SCANNER_CONFIG` – path to the YAML config (defaults to `./configs/config.yaml`).
 - `DATABASE_DSN`, `CHATGPT_API_KEY`, `CHATGPT_MODEL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+
+## Tooling
+
+- `make lint` — runs `gofmt`, `golangci-lint`, and `go vet ./...`.
+- `make test` — runs `go test ./...`.
 
 ## Next steps
 

@@ -16,6 +16,7 @@ const (
 	chatGPTModelEnv   = "CHATGPT_MODEL"
 	telegramTokenEnv  = "TELEGRAM_BOT_TOKEN"
 	telegramChatIDEnv = "TELEGRAM_CHAT_ID"
+	logLevelEnv       = "ARTICLE_SCANNER_LOG_LEVEL"
 )
 
 // Config holds high-level settings required across the application.
@@ -26,6 +27,7 @@ type Config struct {
 	Notifications NotificationConfig `yaml:"notifications"`
 	ML            MLConfig           `yaml:"ml"`
 	ChatGPT       ChatGPTConfig      `yaml:"chatgpt"`
+	Logging       LoggingConfig      `yaml:"logging"`
 	Sites         []SiteConfig       `yaml:"sites"`
 }
 
@@ -78,6 +80,11 @@ type ChatGPTConfig struct {
 	Model        string `yaml:"model"`
 	APIKey       string `yaml:"apiKey"`
 	SystemPrompt string `yaml:"systemPrompt"`
+}
+
+// LoggingConfig controls verbosity and formatting.
+type LoggingConfig struct {
+	Level string `yaml:"level"`
 }
 
 // SiteConfig describes a single site with its scanner strategy.
@@ -140,6 +147,14 @@ func (c *Config) applyEnvOverrides() {
 
 	if v := os.Getenv(chatGPTModelEnv); v != "" {
 		c.ChatGPT.Model = v
+	}
+
+	if v := os.Getenv(logLevelEnv); v != "" {
+		c.Logging.Level = v
+	}
+
+	if c.Logging.Level == "" {
+		c.Logging.Level = "debug"
 	}
 }
 
@@ -221,6 +236,9 @@ func defaultConfig() Config {
 			Model:        "gpt-4o-mini",
 			APIKey:       "",
 			SystemPrompt: "You summarize scientific articles.",
+		},
+		Logging: LoggingConfig{
+			Level: "debug",
 		},
 		Sites: []SiteConfig{
 			{

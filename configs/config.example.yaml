@@ -12,6 +12,8 @@ notifications:
 ml:
   inferenceUrl: https://ml.example.org/infer
   apiKey: ""
+logging:
+  level: debug
 chatgpt:
   endpoint: https://api.openai.com/v1/chat/completions
   model: gpt-4o-mini

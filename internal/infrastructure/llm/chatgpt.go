@@ -69,11 +69,18 @@ func (c *ChatGPTClient) SendDigest(ctx context.Context, payload []byte) error {
 	if err != nil {
 		return fmt.Errorf("send digest: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return fmt.Errorf("chatgpt error %s: %s, close body: %v", resp.Status, strings.TrimSpace(string(payload)), closeErr)
+		}
 		return fmt.Errorf("chatgpt error %s: %s", resp.Status, strings.TrimSpace(string(payload)))
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		return fmt.Errorf("close chatgpt response body: %w", err)
 	}
 
 	return nil

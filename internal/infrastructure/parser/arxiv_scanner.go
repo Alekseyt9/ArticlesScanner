@@ -3,6 +3,7 @@ package parser
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -26,14 +27,15 @@ var dateExpr = regexp.MustCompile(`\d{1,2} [A-Za-z]{3} \d{4}`)
 type ArxivScanner struct {
 	client   *http.Client
 	pageSize int
+	logger   *slog.Logger
 }
 
 // NewArxivScanner wires an HTTP client; pageSize defaults to 200.
-func NewArxivScanner(client *http.Client) *ArxivScanner {
+func NewArxivScanner(client *http.Client, log *slog.Logger) *ArxivScanner {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &ArxivScanner{client: client, pageSize: 200}
+	return &ArxivScanner{client: client, pageSize: 200, logger: log}
 }
 
 // Name identifies the strategy inside the registry.
@@ -47,6 +49,8 @@ func (a *ArxivScanner) Scan(ctx context.Context, req scanner.Request) ([]domain.
 		return nil, fmt.Errorf("no categories provided for site %s", req.SiteName)
 	}
 
+	a.debug("scan start", "site", req.SiteName, "categories", len(req.Categories), "target_day", req.Day.Format("2006-01-02"))
+
 	targetDay := req.Day.UTC().Truncate(24 * time.Hour)
 	results := make([]domain.Article, 0)
 	seen := map[string]struct{}{}
@@ -58,6 +62,7 @@ func (a *ArxivScanner) Scan(ctx context.Context, req scanner.Request) ([]domain.
 			if err != nil {
 				return nil, fmt.Errorf("category %s: %w", cat.Name, err)
 			}
+			a.debug("fetching", "site", req.SiteName, "category", cat.Name, "skip", skip, "url", pageURL)
 
 			doc, err := a.fetchDocument(ctx, pageURL)
 			if err != nil {
@@ -65,6 +70,7 @@ func (a *ArxivScanner) Scan(ctx context.Context, req scanner.Request) ([]domain.
 			}
 
 			pageArticles, shouldContinue := a.extractArticles(doc, targetDay, req.SiteName, cat.Name)
+			a.debug("page processed", "category", cat.Name, "skip", skip, "articles", len(pageArticles), "continue", shouldContinue)
 			for _, article := range pageArticles {
 				if _, ok := seen[article.ID]; ok {
 					continue
@@ -80,10 +86,12 @@ func (a *ArxivScanner) Scan(ctx context.Context, req scanner.Request) ([]domain.
 		}
 	}
 
+	a.debug("scan finished", "site", req.SiteName, "total", len(results))
 	return results, nil
 }
 
 func (a *ArxivScanner) fetchDocument(ctx context.Context, pageURL string) (*goquery.Document, error) {
+	a.debug("requesting", "url", pageURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -94,17 +102,27 @@ func (a *ArxivScanner) fetchDocument(ctx context.Context, pageURL string) (*goqu
 	if err != nil {
 		return nil, fmt.Errorf("request document: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("arxiv returned %s", resp.Status)
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return nil, fmt.Errorf("arxiv returned %s, close body: %v", resp.Status, closeErr)
+		}
+		errMessage := fmt.Errorf("arxiv returned %s", resp.Status)
+		return nil, errMessage
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("parse document: %w", err)
 	}
 
+	if err := resp.Body.Close(); err != nil {
+		return nil, fmt.Errorf("close arxiv response body: %w", err)
+	}
+
+	a.debug("fetched document", "url", pageURL)
 	return doc, nil
 }
 
@@ -163,7 +181,11 @@ func parseEntry(dt, dd *goquery.Selection, siteName, category string) (domain.Ar
 	title = strings.TrimPrefix(title, "Title:")
 	title = strings.TrimSpace(title)
 
-	summary := dd.Find(".mathjax").First().Text()
+	summaryNode := dd.Find("p.mathjax").First()
+	if summaryNode.Length() == 0 {
+		summaryNode = dd.Find(".mathjax").Last()
+	}
+	summary := summaryNode.Text()
 	summary = strings.TrimPrefix(summary, "Abstract:")
 	summary = strings.TrimSpace(summary)
 
@@ -212,4 +234,10 @@ func buildPageURL(base string, skip, pageSize int) (string, error) {
 	query.Set("show", strconv.Itoa(pageSize))
 	parsed.RawQuery = query.Encode()
 	return parsed.String(), nil
+}
+
+func (a *ArxivScanner) debug(msg string, args ...interface{}) {
+	if a.logger != nil {
+		a.logger.Debug(msg, args...)
+	}
 }

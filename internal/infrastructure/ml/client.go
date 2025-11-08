@@ -91,15 +91,30 @@ func (c *Client) post(ctx context.Context, path string, payload any, v any) erro
 	if err != nil {
 		return fmt.Errorf("do request: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			return fmt.Errorf("unexpected status %s, close body: %v", resp.Status, closeErr)
+		}
 		return fmt.Errorf("unexpected status %s", resp.Status)
 	}
 
 	if v == nil {
+		if err := resp.Body.Close(); err != nil {
+			return fmt.Errorf("close response body: %w", err)
+		}
 		return nil
 	}
 
-	return json.NewDecoder(resp.Body).Decode(v)
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		_ = resp.Body.Close()
+		return fmt.Errorf("decode response: %w", err)
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		return fmt.Errorf("close response body: %w", err)
+	}
+
+	return nil
 }

@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"ArticlesScanner/internal/config"
 	"ArticlesScanner/internal/infrastructure/llm"
 	"ArticlesScanner/internal/infrastructure/parser"
+	"ArticlesScanner/internal/logging"
 	"ArticlesScanner/internal/ports"
 	"ArticlesScanner/internal/scanner"
 	"ArticlesScanner/internal/usecase"
@@ -19,11 +21,15 @@ type Application struct {
 }
 
 // New builds a minimal runnable application instance.
-func New(cfg config.Config) *Application {
-	registry := scanner.NewRegistry()
-	registry.Register(parser.NewArxivScanner(nil))
+func New(cfg config.Config, baseLogger *slog.Logger) *Application {
+	if baseLogger == nil {
+		baseLogger = logging.New(cfg.Logging.Level)
+	}
 
-	source := parser.NewStrategySource(registry, cfg.Sites)
+	registry := scanner.NewRegistry()
+	registry.Register(parser.NewArxivScanner(nil, baseLogger.With("component", "scanner.arxiv")))
+
+	source := parser.NewStrategySource(registry, cfg.Sites, baseLogger.With("component", "source"))
 
 	var chatClient ports.ChatClient
 	if cfg.ChatGPT.APIKey != "" {
@@ -33,6 +39,7 @@ func New(cfg config.Config) *Application {
 	pipeline := usecase.NewPipeline(usecase.PipelineDeps{
 		Source:     source,
 		ChatClient: chatClient,
+		Logger:     baseLogger.With("component", "pipeline"),
 	})
 	return &Application{cfg: cfg, pipeline: pipeline}
 }

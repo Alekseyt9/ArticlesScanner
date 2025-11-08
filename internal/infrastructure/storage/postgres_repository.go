@@ -35,18 +35,27 @@ func (r *PostgresRepository) AlreadyProcessed(ctx context.Context, ids []string)
 	if err != nil {
 		return nil, fmt.Errorf("query processed: %w", err)
 	}
-	defer rows.Close()
 
 	result := make(map[string]bool)
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
 			return nil, fmt.Errorf("scan id: %w", err)
 		}
 		result[id] = true
 	}
 
-	return result, rows.Err()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("rows iteration: %w", rowsErr)
+	}
+
+	if closeErr := rows.Close(); closeErr != nil {
+		return nil, fmt.Errorf("close rows: %w", closeErr)
+	}
+
+	return result, nil
 }
 
 // SaveProcessed upserts the processed article snapshot.

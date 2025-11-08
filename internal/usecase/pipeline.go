@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"time"
 
 	"ArticlesScanner/internal/domain"
@@ -20,6 +21,7 @@ type PipelineDeps struct {
 	Downloader ports.Downloader
 	Notifier   ports.Notifier
 	ChatClient ports.ChatClient
+	Logger     *slog.Logger
 }
 
 // Pipeline implements the article-ingestion workflow.
@@ -31,6 +33,7 @@ type Pipeline struct {
 	downloader ports.Downloader
 	notifier   ports.Notifier
 	chatClient ports.ChatClient
+	logger     *slog.Logger
 }
 
 // NewPipeline constructs the orchestration component.
@@ -43,6 +46,7 @@ func NewPipeline(deps PipelineDeps) *Pipeline {
 		downloader: deps.Downloader,
 		notifier:   deps.Notifier,
 		chatClient: deps.ChatClient,
+		logger:     deps.Logger,
 	}
 }
 
@@ -52,10 +56,13 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 		return nil
 	}
 
+	p.debug("starting pipeline", "day", day.Format("2006-01-02"))
+
 	articles, err := p.source.FetchDaily(ctx, day)
 	if err != nil {
 		return fmt.Errorf("fetch daily: %w", err)
 	}
+	p.debug("source returned articles", "count", len(articles))
 
 	ids := make([]string, len(articles))
 	for i, art := range articles {
@@ -73,8 +80,11 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 	var digest []domain.ArticleReview
 	for _, article := range articles {
 		if skip[article.ID] {
+			p.debug("skip article (already processed)", "article_id", article.ID)
 			continue
 		}
+
+		p.debug("processing article", "article_id", article.ID)
 
 		review := domain.ArticleReview{
 			Article: article,
@@ -95,11 +105,15 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 				return fmt.Errorf("download article %s: %w", article.ID, dErr)
 			}
 			if reader != nil {
-				payload, err = io.ReadAll(reader)
-				reader.Close()
-				if err != nil {
-					return fmt.Errorf("read article %s: %w", article.ID, err)
+				data, readErr := io.ReadAll(reader)
+				closeErr := reader.Close()
+				if readErr != nil {
+					return fmt.Errorf("read article %s: %w", article.ID, readErr)
 				}
+				if closeErr != nil {
+					return fmt.Errorf("close article %s: %w", article.ID, closeErr)
+				}
+				payload = data
 			}
 		}
 
@@ -127,6 +141,7 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 	}
 
 	if len(digest) == 0 {
+		p.debug("no articles processed", "day", day.Format("2006-01-02"))
 		return nil
 	}
 
@@ -138,6 +153,7 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 		if err := p.chatClient.SendDigest(ctx, payload); err != nil {
 			return fmt.Errorf("send digest to chatgpt: %w", err)
 		}
+		p.debug("sent articles to chatgpt", "count", len(digest))
 	}
 
 	if p.notifier == nil {
@@ -145,6 +161,7 @@ func (p *Pipeline) ProcessDay(ctx context.Context, day time.Time) error {
 	}
 
 	message := buildDigestMessage(digest)
+	p.debug("publishing digest to notifier", "bytes", len(message))
 	return p.notifier.PublishDigest(ctx, message)
 }
 
@@ -186,4 +203,10 @@ func buildDigestJSON(reviews []domain.ArticleReview) ([]byte, error) {
 	}
 
 	return json.Marshal(payload)
+}
+
+func (p *Pipeline) debug(msg string, args ...interface{}) {
+	if p.logger != nil {
+		p.logger.Debug(msg, args...)
+	}
 }
