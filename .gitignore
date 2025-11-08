@@ -1,0 +1,23 @@
+bin/
+dist/
+coverage/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Local tooling
+.idea/
+.vscode/
+*.log
+
+# Runtime configuration
+configs/config.yaml
+scripts/run.sh
+scripts/run.cmd
+
+# Environment files
+.env
