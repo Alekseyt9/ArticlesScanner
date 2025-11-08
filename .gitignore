@@ -15,9 +15,10 @@ coverage/
 *.log
 
 # Runtime configuration
-configs/config.yaml
 scripts/run.sh
 scripts/run.cmd
 
 # Environment files
 .env
+run.cmd
+run.sh

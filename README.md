@@ -20,6 +20,8 @@ internal/usecase       # orchestration logic (pipeline, scheduler)
 internal/infrastructure# adapters (parser strategies, storage, ml, llm, scheduler, telegram)
 internal/logging       # slog helper wiring
 configs/               # YAML configuration (real file gitignored, example tracked)
+configs/config.sample.yaml  # ready-to-copy sample config
+migrations/            # SQL migrations (init schema, etc.)
 scripts/               # run script templates for Linux/Windows
 ```
 

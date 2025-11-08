@@ -1,0 +1,35 @@
+database:
+  dsn: postgres://user:pass@localhost:5432/articles
+scheduler:
+  cronExpression: "0 6 * * *"
+  timezone: Europe/Moscow
+providers:
+  articleApiUrl: https://api.example.org/articles
+notifications:
+  telegram:
+    botToken: ""
+    chatId: ""
+ml:
+  inferenceUrl: https://ml.example.org/infer
+  apiKey: ""
+logging:
+  level: debug
+chatgpt:
+  endpoint: https://api.openai.com/v1/chat/completions
+  model: gpt-4o-mini
+  apiKey: ${CHATGPT_API_KEY}
+  systemPrompt: |
+    You are a helpful assistant that reformats scientific article digests.
+sites:
+  - name: arxiv-ai
+    scanner: arxiv
+    categories:
+      - name: cs.AI
+        url: https://export.arxiv.org/list/cs.AI/
+      - name: cs.LG
+        url: https://export.arxiv.org/list/cs.LG/
+  - name: arxiv-math
+    scanner: arxiv
+    categories:
+      - name: math.PR
+        url: https://export.arxiv.org/list/math.PR/
